@@ -1,0 +1,15 @@
+[project]
+name = "silver-healthcare-backend"
+version = "0.1.0"
+description = "실시간 건강 모니터링 시스템 백엔드"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "pydantic>=2.5.0",
+    "python-multipart>=0.0.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
