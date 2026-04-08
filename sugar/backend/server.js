@@ -120,7 +120,7 @@ app.post('/api/records', authenticateToken, (req, res) => {
     const { score, ramen_type, student_id, user_type } = req.body;
     const username = req.user.username === 'GUEST' ? null : req.user.username;
 
-    db.run("INSERT INTO records (username, student_id, score, ramen_type, user_type) VALUES (?, ?, ?, ?, ?)", [username, student_id, score, ramen_type, user_type], (err) => {
+    db.run("INSERT INTO records (username, student_id, score, ramen_type, user_type, created_at) VALUES (?, ?, ?, ?, ?, DATETIME('now', 'localtime'))", [username, student_id, score, ramen_type, user_type], (err) => {
         if (err) return res.status(500).json({ error: '기록 저장 실패' });
         res.json({ message: '기록이 저장되었습니다.' });
     });
@@ -156,7 +156,7 @@ app.get('/api/admin/users', authenticateToken, (req, res) => {
             COUNT(CASE WHEN r.ramen_type != 'NONE' AND r.ramen_type IS NOT NULL AND r.ramen_type != 'STAMP' THEN 1 END) as total_ramen,
             COUNT(CASE WHEN r.ramen_type = 'STAMP' THEN 1 END) as total_stamps,
             MAX(r.score) as high_score,
-            COALESCE(u.created_at, MAX(r.created_at), '2000-01-01') as activity_date
+            COALESCE(MAX(r.created_at), u.created_at, '2000-01-01') as activity_date
         FROM users u
         LEFT JOIN records r ON u.username = r.username AND u.user_type = r.user_type
         WHERE u.is_admin = 0

@@ -54,12 +54,18 @@ const AdminStep = ({ token, onLogout }) => {
         fetchUsers();
     }, [token]);
 
-    const filteredUsers = users.filter(u => {
-        const matchesSearch = u.username.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                             (u.student_id && u.student_id.includes(searchTerm));
-        const matchesFilter = filter === 'all' || u.user_type === filter;
-        return matchesSearch && matchesFilter;
-    });
+    const filteredUsers = users
+        .filter(u => {
+            const matchesSearch = u.username.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                 (u.student_id && u.student_id.includes(searchTerm));
+            const matchesFilter = filter === 'all' || u.user_type === filter;
+            return matchesSearch && matchesFilter;
+        })
+        .sort((a, b) => {
+            const dateA = a.activity_date && a.activity_date !== '2000-01-01' ? new Date(a.activity_date) : new Date(0);
+            const dateB = b.activity_date && b.activity_date !== '2000-01-01' ? new Date(b.activity_date) : new Date(0);
+            return dateB - dateA; // Descending
+        });
 
     const stats = {
         total: users.length,
