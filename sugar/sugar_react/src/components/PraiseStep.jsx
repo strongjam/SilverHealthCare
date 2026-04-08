@@ -172,11 +172,13 @@ const PraiseStep = ({ user, userType, score, token, finalRewardMessage, onRestar
                 </div>
 
                 <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                    <button className="num-btn special" 
-                            style={{ height: '55px', borderRadius: '15px', fontSize: '1.1rem' }} 
-                            onClick={handleToggleArchive}>
-                        <History size={20} style={{ marginRight: '10px' }} /> 지난 말씀 모두 보기 (View Past Verses)
-                    </button>
+                    {score >= 85 && token && (
+                        <button className="num-btn special" 
+                                style={{ height: '55px', borderRadius: '15px', fontSize: '1.1rem' }} 
+                                onClick={handleToggleArchive}>
+                            <History size={20} style={{ marginRight: '10px' }} /> 지난 말씀 모두 보기 (View Past Verses)
+                        </button>
+                    )}
                     <button className="btn-primary" style={{ height: '60px', borderRadius: '15px', fontSize: '1.2rem' }} onClick={onRestart}>
                         메인화면으로 돌아가기 (Home)
                     </button>
