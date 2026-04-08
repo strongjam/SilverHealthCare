@@ -25,9 +25,19 @@ function App() {
   const handleSelection = (type) => {
     setUserType(type);
     localStorage.setItem('sugar_user_type', type);
-    // Everyone skips initial Auth and goes straight to Recital
+    // For a new selection, ensure we are logged out unless specifically needed
+    if (localStorage.getItem('sugar_token') && localStorage.getItem('sugar_is_admin') !== 'true') {
+        handleLogout();
+    }
     setStep(1); 
   };
+
+  useEffect(() => {
+    // If the page is reloaded and it's not an admin session, start fresh
+    if (localStorage.getItem('sugar_token') && localStorage.getItem('sugar_is_admin') !== 'true') {
+        handleLogout();
+    }
+  }, []);
 
   const handleAuthSuccess = (data) => {
     setUser(data.username);
@@ -127,11 +137,8 @@ function App() {
   };
 
   const handleRestart = () => {
-    isSubmitting.current = false; // Reset for next session
-    localStorage.removeItem('sugar_user_name');
-    localStorage.removeItem('sugar_token');
-    localStorage.removeItem('sugar_is_admin');
-    localStorage.removeItem('sugar_user_type');
+    isSubmitting.current = false; 
+    localStorage.clear();
     setStep(-3);
     setUser('');
     setToken('');
@@ -165,7 +172,7 @@ function App() {
             onBack={() => setStep(-3)} 
         />
       )}
-      {step === 1 && <RecitalStep userType={userType} onNext={handleRecitalNext} onBack={() => setStep(-3)} />}
+      {step === 1 && <RecitalStep userType={userType} token={token} onNext={handleRecitalNext} onBack={() => { handleRestart(); }} />}
       
       {step === 2 && (
         <RewardStep 
@@ -181,6 +188,7 @@ function App() {
             user={user || studentId} 
             userType={userType} 
             score={score} 
+            token={token}
             finalRewardMessage={finalRewardMessage} 
             onRestart={handleRestart} 
         />
