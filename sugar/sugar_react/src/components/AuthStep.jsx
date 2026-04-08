@@ -6,6 +6,7 @@ const AuthStep = ({ onAuthSuccess, onBack, userType, pendingRamen }) => {
     const [isLogin, setIsLogin] = useState(true);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState({ type: '', text: '' });
 
@@ -14,6 +15,10 @@ const AuthStep = ({ onAuthSuccess, onBack, userType, pendingRamen }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!username || !password) return alert('아이디와 비밀번호를 입력해주세요.');
+        if (!isLogin && password !== confirmPassword) {
+            setMessage({ type: 'error', text: '비밀번호가 일치하지 않습니다.' });
+            return;
+        }
         
         setLoading(true);
         setMessage({ type: '', text: '' });
@@ -89,7 +94,7 @@ const AuthStep = ({ onAuthSuccess, onBack, userType, pendingRamen }) => {
                         <button 
                             className={`num-btn ${!isLogin ? 'active' : 'special'}`} 
                             style={{ flex: 1, height: '50px', background: !isLogin ? 'var(--primary-gradient)' : '', color: !isLogin ? 'white' : '' }}
-                            onClick={() => { setIsLogin(false); setMessage({ type: '', text: '' }); SFX.play('click'); }}
+                            onClick={() => { setIsLogin(false); setConfirmPassword(''); setMessage({ type: '', text: '' }); SFX.play('click'); }}
                         >
                             회원가입
                         </button>
@@ -123,6 +128,22 @@ const AuthStep = ({ onAuthSuccess, onBack, userType, pendingRamen }) => {
                                 />
                             </div>
                         </div>
+
+                        {!isLogin && (
+                            <div className="input-display-container" style={{ margin: 0 }}>
+                                <div style={{ position: 'relative' }}>
+                                    <Lock size={20} style={{ position: 'absolute', left: '15px', top: '50%', transform: 'translateY(-50%)', color: '#999' }} />
+                                    <input 
+                                        type="password" 
+                                        placeholder="비밀번호 확인 (Confirm Password)"
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        className="input-display"
+                                        style={{ fontSize: '1.2rem', paddingLeft: '45px', textAlign: 'left', letterSpacing: 'normal' }}
+                                    />
+                                </div>
+                            </div>
+                        )}
 
                         {message.text && (
                             <p style={{ color: message.type === 'error' ? '#ff4d4f' : '#52c41a', fontSize: '0.9rem', textAlign: 'center' }}>
