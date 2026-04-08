@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Silver Health Care - 위치 확인</title>
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            --bg-mesh:
+                radial-gradient(at 0% 0%, rgba(79, 172, 254, 0.1) 0, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(0, 242, 254, 0.1) 0, transparent 50%);
+            --glass-bg: rgba(255, 255, 255, 0.8);
+            --text-main: #2d3436;
+            --shadow-premium: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f0f7ff;
+            background-image: var(--bg-mesh);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: var(--text-main);
+        }
+
+        .container {
+            width: 90%;
+            max-width: 450px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 30px;
+            padding: 40px 30px;
+            text-align: center;
+            box-shadow: var(--shadow-premium);
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 30px;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-box {
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 30px;
+            min-height: 80px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-weight: 500;
+            color: #636e72;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        #locResult {
+            font-size: 1.1rem;
+            color: var(--text-main);
+            line-height: 1.5;
+        }
+
+        .btn-check {
+            width: 100%;
+            padding: 18px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: white;
+            background: var(--primary-gradient);
+            border: none;
+            border-radius: 15px;
+            cursor: pointer;
+            box-shadow: 0 10px 20px rgba(79, 172, 254, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .btn-check:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 30px rgba(79, 172, 254, 0.4);
+        }
+
+        .btn-check:active {
+            transform: scale(0.95);
+        }
+
+        .btn-check:disabled {
+            background: #cbd5e0;
+            box-shadow: none;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading-dots:after {
+            content: '.';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+
+        @keyframes dots {
+
+            0%,
+            20% {
+                content: '.';
+            }
+
+            40% {
+                content: '..';
+            }
+
+            60% {
+                content: '...';
+            }
+
+            80%,
+            100% {
+                content: '';
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>나침반 위치 확인</h1>
+        <div class="status-box">
+            <div id="locResult">위치를 확인하려면 아래 버튼을 눌러주세요.</div>
+        </div>
+        <button id="btnLoc" class="btn-check" onclick="getLocation()" disabled>지도로 확인 중<span
+                class="loading-dots"></span></button>
+    </div>
+
+    <!-- Kakao Maps SDK -->
+    <script
+        src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=179ce565b919251b4ba2318c2d4c5165&libraries=services&autoload=false"></script>
+
+    <script>
+        const resultDisplay = document.getElementById("locResult");
+        const locBtn = document.getElementById("btnLoc");
+        let isKakaoLoaded = false;
+
+        // 1. Loading Timeout Fallback (5 seconds)
+        const loadTimeout = setTimeout(() => {
+            if (!isKakaoLoaded) {
+                console.warn("Kakao SDK load timeout. Switching to Direct Geolocation Mode.");
+                locBtn.innerText = "단순 위치 확인 (좌표)";
+                locBtn.disabled = false;
+                resultDisplay.innerHTML += "<br><small style='color:#e67e22;'>⚠️ 지도가 로드되지 않아 주상 변환 없이 좌표만 표시됩니다. (로컬 파일 실행 시 보안 차단 가능)</small>";
+            }
+        }, 5000);
+
+        // Initialization: Wait for Kakao Maps to load
+        if (typeof kakao !== 'undefined' && kakao.maps) {
+            kakao.maps.load(function () {
+                console.log("Kakao Maps Loaded Successfully");
+                isKakaoLoaded = true;
+                clearTimeout(loadTimeout);
+                locBtn.innerText = "현재 위치 확인하기";
+                locBtn.disabled = false;
+                resultDisplay.innerHTML = "위치를 확인하려면 아래 버튼을 눌러주세요.";
+            });
+        }
+
+        function getLocation() {
+            locBtn.disabled = true;
+            resultDisplay.innerHTML = "위치 정보를 가져오는 중입니다<span class='loading-dots'></span>";
+
+            if (!navigator.geolocation) {
+                resultDisplay.innerText = "죄송합니다. 이 브라우저는 위치 정보를 지원하지 않습니다.";
+                locBtn.disabled = false;
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                function (pos) {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+
+                    console.log(`Coords: ${lat}, ${lng}`);
+
+                    if (isKakaoLoaded) {
+                        // Try Reverse Geocoding via Kakao
+                        try {
+                            const geocoder = new kakao.maps.services.Geocoder();
+                            geocoder.coord2Address(lng, lat, function (result, status) {
+                                if (status === kakao.maps.services.Status.OK) {
+                                    const address = result[0].address.address_name;
+                                    resultDisplay.innerHTML = `📍 <strong>현재 위치:</strong><br>${address}`;
+                                } else {
+                                    resultDisplay.innerHTML = `📍 <strong>위치 확인 (좌표):</strong><br>위도: ${lat.toFixed(4)}, 경도: ${lng.toFixed(4)}<br><small>(주소 변환 실패)</small>`;
+                                }
+                                locBtn.disabled = false;
+                            });
+                        } catch (e) {
+                            console.error("Geocoder error", e);
+                            resultDisplay.innerHTML = `📍 <strong>위치 확인 (좌표):</strong><br>위도: ${lat.toFixed(4)}, 경도: ${lng.toFixed(4)}`;
+                            locBtn.disabled = false;
+                        }
+                    } else {
+                        // SDK Fallback Mode: Show Coordinates Only
+                        resultDisplay.innerHTML = `📍 <strong>위치 확인 (좌표):</strong><br>위도: ${lat.toFixed(4)}, 경도: ${lng.toFixed(4)}<br><small>(지도 라이브러리 미로드)</small>`;
+                        locBtn.disabled = false;
+                    }
+                },
+                function (error) {
+                    let msg = "위치 정보를 가져오는 데 실패했습니다.";
+                    if (error.code === 1) msg = "위치 정보 접근 권한이 거부되었습니다.";
+                    else if (error.code === 2) msg = "위치 정보를 사용할 수 없습니다.";
+                    else if (error.code === 3) msg = "시간 초과로 위치 정보를 가져오지 못했습니다.";
+
+                    resultDisplay.innerText = msg;
+                    locBtn.disabled = false;
+                },
+                { timeout: 10000, enableHighAccuracy: true }
+            );
+        }
+
+        // Global exposing for button onclick
+        window.getLocation = getLocation;
+    </script>
+    <!--
+        [Troubleshooting Tip]
+        1. Local File Security (ORB): Opening .html directly via file:// often blocks scripts.
+           Use VS Code "Live Server" or run 'npx serve' in terminal.
+        2. Kakao Developers Console: You MUST register 'http://localhost' or your domain
+           under [My Application] > [Platform] > [Web].
+    -->

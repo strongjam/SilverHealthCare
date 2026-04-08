@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sugar Logos - Mission</title>
+    <link rel="stylesheet" href="index.css?v=1.1.0">
+</head>
+<body>
+    <div class="kiosk-container">
+        <header>
+            <h1>Step 2. 성경 암송</h1>
+            <p class="subtitle">말씀을 다 외운 후 종료 버튼을 눌러주세요!</p>
+        </header>
+
+        <main>
+            <div class="voice-wave">
+                <div class="wave-bar" style="animation-delay: 0s"></div>
+                <div class="wave-bar" style="animation-delay: 0.1s"></div>
+                <div class="wave-bar" style="animation-delay: 0.2s"></div>
+                <div class="wave-bar" style="animation-delay: 0.3s"></div>
+                <div class="wave-bar" style="animation-delay: 0.4s"></div>
+            </div>
+
+            <div class="mission-card">
+                <p id="verse-ref" style="color: #FF8E53; font-weight: 700; font-size: 1.4rem; letter-spacing: 1px;">요한복음 3:16</p>
+                <h2 class="verse-text">
+                    "하나님이 세상을 이처럼 사랑하사 독생자를 주셨으니 이는 그를 믿는 자마다 멸망하지 않고 영생을 얻게 하려 하심이라"
+                </h2>
+                <div class="transcript-container" style="margin-top: 20px; min-height: 50px; padding: 15px; background: rgba(0,0,0,0.03); border-radius: 15px;">
+                    <p style="font-size: 0.9rem; color: #999; margin-bottom: 5px;">실시간 인식 내용:</p>
+                    <p class="transcript-text" style="font-size: 1.2rem; font-weight: 500; color: #4facfe;">(대기 중...)</p>
+                </div>
+                <!-- Score Badge (Hidden by default) -->
+                <div class="score-badge" style="display: none; justify-content: center; align-items: center; gap: 10px; margin-top: 20px; font-size: 2rem; font-weight: 800; animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
+                </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 20px;">
+                <button class="btn-primary btn-secondary btn-audio">🔊 발음 듣기 (Listen)</button>
+                <button class="btn-primary btn-recite" style="background: var(--primary-gradient);">🎤 암송 시작 (Recite)</button>
+                <button class="btn-primary btn-check" disabled style="opacity: 0.5; cursor: not-allowed; transition: all 0.5s;">미션 완료 대기 중...</button>
+            </div>
+            
+            <div style="margin-top: 35px; text-align: center;">
+                <button class="num-btn special" style="width: 180px; height: 55px;" onclick="goTo('step1.html')">이전으로</button>
+            </div>
+        </main>
+
+        <footer>
+            <div class="progress-container">
+                <div class="progress-bar" style="width: 66%;"></div>
+            </div>
+            <div class="step-indicator">
+                <span>미션 암송</span>
+                <span>66%</span>
+            </div>
+        </footer>
+    </div>
+    <script src="verses.js?v=1.1.0"></script>
+    <script src="app.js?v=1.1.0"></script>
+</body>
+</html>

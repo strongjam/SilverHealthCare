@@ -1,17 +1,41 @@
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Header, status, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import List, Optional
 from datetime import datetime, timedelta
 import json
 import secrets
 from pathlib import Path
+import os
+from dotenv import load_dotenv
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from models import (
     User, Admin, LoginRequest, LoginResponse,
     HealthData, Medication, MedicationLog,
     EmergencyAlert, HealthReport
 )
 
+# 환경 변수 로드
+load_dotenv(dotenv_path=".env.development")
+
+SECRET_KEY = os.getenv("SECRET_KEY", "default-secret-key")
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
+
+# 보안 설정
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
+
+# Rate Limiting
+limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(title="Silver Healthcare API - Extended")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS 설정
 app.add_middleware(
@@ -47,6 +71,13 @@ def save_json(file_path: Path, data):
     with open(file_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+# 비밀번호 해싱
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
 # 초기 데이터 설정
 def initialize_data():
     # 사용자 데이터
@@ -77,7 +108,7 @@ def initialize_data():
             {
                 "id": "admin1",
                 "username": "admin",
-                "password": "admin123",  # 실제 운영시 해싱 필요
+                "password": get_password_hash("admin123"),
                 "name": "관리자",
                 "role": "admin",
                 "email": "admin@silverhealthcare.com",
@@ -86,7 +117,7 @@ def initialize_data():
             {
                 "id": "guardian1",
                 "username": "guardian",
-                "password": "guard123",
+                "password": get_password_hash("guard123"),
                 "name": "보호자",
                 "role": "guardian",
                 "email": "guardian@silverhealthcare.com",
@@ -104,67 +135,69 @@ def initialize_data():
 initialize_data()
 
 # 인증 관련
-def verify_token(authorization: Optional[str] = Header(None)):
-    if not authorization:
-        raise HTTPException(status_code=401, detail="인증이 필요합니다")
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
 
-    token = authorization.replace("Bearer ", "")
-    sessions = load_json(SESSIONS_FILE)
-    session = next((s for s in sessions if s["token"] == token), None)
-
-    if not session:
-        raise HTTPException(status_code=401, detail="유효하지 않은 토큰입니다")
-
-    # 토큰 만료 확인 (24시간)
-    created_at = datetime.fromisoformat(session["created_at"])
-    if datetime.now() - created_at > timedelta(hours=24):
-        raise HTTPException(status_code=401, detail="토큰이 만료되었습니다")
-
-    return session
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    
+    admins = load_json(ADMINS_FILE)
+    user = next((a for a in admins if a["username"] == username), None)
+    if user is None:
+        raise credentials_exception
+    return user
 
 # ===== 인증 API =====
 @app.post("/api/auth/login", response_model=LoginResponse)
-def login(request: LoginRequest):
+@limiter.limit("5/minute")
+async def login(login_request: LoginRequest, request: Request = None): # request for limiter
     """로그인"""
     admins = load_json(ADMINS_FILE)
-    admin = next((a for a in admins if a["username"] == request.username and
-                  a["password"] == request.password), None)
+    admin = next((a for a in admins if a["username"] == login_request.username), None)
 
-    if not admin:
+    if not admin or not verify_password(login_request.password, admin["password"]):
         raise HTTPException(status_code=401, detail="사용자명 또는 비밀번호가 잘못되었습니다")
 
-    # 세션 생성
-    token = secrets.token_urlsafe(32)
-    sessions = load_json(SESSIONS_FILE)
-    session = {
-        "token": token,
-        "admin_id": admin["id"],
-        "username": admin["username"],
-        "role": admin["role"],
-        "created_at": datetime.now().isoformat()
-    }
-    sessions.append(session)
-    save_json(SESSIONS_FILE, sessions)
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": admin["username"], "role": admin["role"], "admin_id": admin["id"]},
+        expires_delta=access_token_expires
+    )
 
     return LoginResponse(
-        token=token,
+        token=access_token,
         user={"id": admin["id"], "name": admin["name"], "username": admin["username"]},
         role=admin["role"]
     )
 
 @app.post("/api/auth/logout")
-def logout(session: dict = Depends(verify_token)):
+def logout(current_user: dict = Depends(get_current_user)):
     """로그아웃"""
-    sessions = load_json(SESSIONS_FILE)
-    sessions = [s for s in sessions if s["token"] != session["token"]]
-    save_json(SESSIONS_FILE, sessions)
+    # JWT는 클라이언트에서 삭제하면 됨
     return {"message": "로그아웃되었습니다"}
 
 @app.get("/api/auth/me")
-def get_current_user(session: dict = Depends(verify_token)):
+def get_current_user_info(current_user: dict = Depends(get_current_user)):
     """현재 로그인한 사용자 정보"""
-    admins = load_json(ADMINS_FILE)
-    admin = next((a for a in admins if a["id"] == session["admin_id"]), None)
+    admin = current_user
     if not admin:
         raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
 
@@ -175,10 +208,10 @@ def get_current_user(session: dict = Depends(verify_token)):
 
 # ===== 사용자 API (기존) =====
 @app.get("/api/users", response_model=List[User])
-def get_users(session: dict = Depends(verify_token)):
+def get_users(current_user: dict = Depends(get_current_user)):
     """모든 사용자 조회"""
     admins = load_json(ADMINS_FILE)
-    admin = next((a for a in admins if a["id"] == session["admin_id"]), None)
+    admin = current_user
 
     users = load_json(USERS_FILE)
 
@@ -189,7 +222,7 @@ def get_users(session: dict = Depends(verify_token)):
     return users
 
 @app.get("/api/users/{user_id}", response_model=User)
-def get_user(user_id: str, session: dict = Depends(verify_token)):
+def get_user(user_id: str, current_user: dict = Depends(get_current_user)):
     """특정 사용자 조회"""
     users = load_json(USERS_FILE)
     user = next((u for u in users if u["id"] == user_id), None)
@@ -200,21 +233,21 @@ def get_user(user_id: str, session: dict = Depends(verify_token)):
 # ===== 건강 데이터 API (기존) =====
 @app.get("/api/health-data/{user_id}", response_model=List[HealthData])
 def get_user_health_data(user_id: str, limit: Optional[int] = 50,
-                         session: dict = Depends(verify_token)):
+                         current_user: dict = Depends(get_current_user)):
     """특정 사용자의 건강 데이터 조회"""
     all_data = load_json(HEALTH_DATA_FILE)
     user_data = [d for d in all_data if d["user_id"] == user_id]
     return user_data[-limit:] if limit else user_data
 
 @app.get("/api/health-data/{user_id}/latest")
-def get_latest_health_data(user_id: str, session: dict = Depends(verify_token)):
+def get_latest_health_data(user_id: str, current_user: dict = Depends(get_current_user)):
     """최신 건강 데이터"""
     all_data = load_json(HEALTH_DATA_FILE)
     user_data = [d for d in all_data if d["user_id"] == user_id]
     return user_data[-1] if user_data else None
 
 @app.post("/api/health-data", response_model=HealthData)
-def create_health_data(health_data: HealthData, session: dict = Depends(verify_token)):
+def create_health_data(health_data: HealthData, current_user: dict = Depends(get_current_user)):
     """건강 데이터 생성"""
     all_data = load_json(HEALTH_DATA_FILE)
     all_data.append(health_data.model_dump())
@@ -226,7 +259,7 @@ def create_health_data(health_data: HealthData, session: dict = Depends(verify_t
     return health_data
 
 @app.get("/api/health-data/{user_id}/alerts")
-def get_health_alerts(user_id: str, session: dict = Depends(verify_token)):
+def get_health_alerts(user_id: str, current_user: dict = Depends(get_current_user)):
     """사용자의 건강 알림 조회"""
     all_data = load_json(HEALTH_DATA_FILE)
     user_data = [d for d in all_data if d["user_id"] == user_id]
@@ -257,7 +290,7 @@ def get_health_alerts(user_id: str, session: dict = Depends(verify_token)):
 
 # ===== 복약 관리 API =====
 @app.get("/api/medications/{user_id}")
-def get_user_medications(user_id: str, session: dict = Depends(verify_token)):
+def get_user_medications(user_id: str, current_user: dict = Depends(get_current_user)):
     """사용자의 복약 목록"""
     medications = load_json(MEDICATIONS_FILE)
     users = load_json(USERS_FILE)
@@ -274,7 +307,7 @@ def get_user_medications(user_id: str, session: dict = Depends(verify_token)):
     return user_meds
 
 @app.post("/api/medications", response_model=Medication)
-def create_medication(medication: Medication, session: dict = Depends(verify_token)):
+def create_medication(medication: Medication, current_user: dict = Depends(get_current_user)):
     """복약 정보 생성"""
     medications = load_json(MEDICATIONS_FILE)
     medications.append(medication.model_dump())
@@ -283,7 +316,7 @@ def create_medication(medication: Medication, session: dict = Depends(verify_tok
 
 @app.get("/api/medication-logs/{user_id}")
 def get_medication_logs(user_id: str, date: Optional[str] = None,
-                        session: dict = Depends(verify_token)):
+                        current_user: dict = Depends(get_current_user)):
     """복약 기록 조회"""
     logs = load_json(MEDICATION_LOGS_FILE)
     user_logs = [l for l in logs if l["user_id"] == user_id]
@@ -294,7 +327,7 @@ def get_medication_logs(user_id: str, date: Optional[str] = None,
     return user_logs
 
 @app.post("/api/medication-logs", response_model=MedicationLog)
-def create_medication_log(log: MedicationLog, session: dict = Depends(verify_token)):
+def create_medication_log(log: MedicationLog, current_user: dict = Depends(get_current_user)):
     """복약 기록 생성"""
     logs = load_json(MEDICATION_LOGS_FILE)
     logs.append(log.model_dump())
@@ -303,7 +336,7 @@ def create_medication_log(log: MedicationLog, session: dict = Depends(verify_tok
 
 @app.put("/api/medication-logs/{log_id}")
 def update_medication_log(log_id: str, status: str, taken_time: Optional[str] = None,
-                          session: dict = Depends(verify_token)):
+                          current_user: dict = Depends(get_current_user)):
     """복약 기록 업데이트"""
     logs = load_json(MEDICATION_LOGS_FILE)
     log = next((l for l in logs if l["id"] == log_id), None)
@@ -321,7 +354,7 @@ def update_medication_log(log_id: str, status: str, taken_time: Optional[str] = 
 # ===== 응급 알림 API =====
 @app.get("/api/emergency-alerts")
 def get_emergency_alerts(status: Optional[str] = None,
-                        session: dict = Depends(verify_token)):
+                        current_user: dict = Depends(get_current_user)):
     """응급 알림 목록"""
     alerts = load_json(EMERGENCY_ALERTS_FILE)
     users = load_json(USERS_FILE)
@@ -355,7 +388,7 @@ def get_emergency_alerts(status: Optional[str] = None,
     return alerts
 
 @app.post("/api/emergency-alerts", response_model=EmergencyAlert)
-def create_emergency_alert(alert: EmergencyAlert, session: dict = Depends(verify_token)):
+def create_emergency_alert(alert: EmergencyAlert, current_user: dict = Depends(get_current_user)):
     """응급 알림 생성"""
     alerts = load_json(EMERGENCY_ALERTS_FILE)
     alerts.append(alert.model_dump())
@@ -363,7 +396,7 @@ def create_emergency_alert(alert: EmergencyAlert, session: dict = Depends(verify
     return alert
 
 @app.put("/api/emergency-alerts/{alert_id}/acknowledge")
-def acknowledge_alert(alert_id: str, session: dict = Depends(verify_token)):
+def acknowledge_alert(alert_id: str, current_user: dict = Depends(get_current_user)):
     """알림 확인"""
     alerts = load_json(EMERGENCY_ALERTS_FILE)
     alert = next((a for a in alerts if a["id"] == alert_id), None)
@@ -372,7 +405,7 @@ def acknowledge_alert(alert_id: str, session: dict = Depends(verify_token)):
         raise HTTPException(status_code=404, detail="알림을 찾을 수 없습니다")
 
     alert["acknowledged"] = True
-    alert["acknowledged_by"] = session.get("admin_id", session.get("username", "관리자"))
+    alert["acknowledged_by"] = current_user.get("id", current_user.get("username", "관리자"))
     alert["acknowledged_at"] = datetime.now().isoformat()
 
     save_json(EMERGENCY_ALERTS_FILE, alerts)
@@ -426,7 +459,7 @@ def check_emergency_conditions(health_data: HealthData):
 
 # ===== 건강 리포트 API =====
 @app.get("/api/health-reports/{user_id}")
-def get_health_reports(user_id: str, session: dict = Depends(verify_token)):
+def get_health_reports(user_id: str, current_user: dict = Depends(get_current_user)):
     """건강 리포트 목록"""
     reports = load_json(HEALTH_REPORTS_FILE)
     users = load_json(USERS_FILE)
@@ -444,7 +477,7 @@ def get_health_reports(user_id: str, session: dict = Depends(verify_token)):
 
 @app.post("/api/health-reports/generate/{user_id}")
 def generate_health_report(user_id: str, period_days: int = 7,
-                          session: dict = Depends(verify_token)):
+                          current_user: dict = Depends(get_current_user)):
     """건강 리포트 자동 생성"""
     # 최근 period_days 일간의 데이터 수집
     end_date = datetime.now()
@@ -510,10 +543,10 @@ def generate_health_report(user_id: str, period_days: int = 7,
 
 # ===== 대시보드 API =====
 @app.get("/api/dashboard/overview")
-def get_dashboard_overview(session: dict = Depends(verify_token)):
+def get_dashboard_overview(current_user: dict = Depends(get_current_user)):
     """보호자/운영자 대시보드 개요"""
     admins = load_json(ADMINS_FILE)
-    admin = next((a for a in admins if a["id"] == session["admin_id"]), None)
+    admin = current_user
 
     users = load_json(USERS_FILE)
     if admin["role"] == "guardian":

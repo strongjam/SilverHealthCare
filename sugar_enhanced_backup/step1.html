@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sugar Logos - Welcome</title>
+    <link rel="stylesheet" href="index.css?v=1.1.0">
+</head>
+<body>
+    <div class="kiosk-container">
+        <header>
+            <h1>Sugar Logos</h1>
+            <p class="subtitle">성경암송 한구절, 사랑 한 그릇</p>
+        </header>
+
+        <main>
+            <div style="text-align: center; margin-bottom: 30px;">
+                <h2 style="font-weight: 600; color: #1e272e;">본인 확인을 진행해 주세요</h2>
+            </div>
+            
+            <div class="input-display-container">
+                <div class="input-display" id="input-display"></div>
+            </div>
+
+            <div class="numpad">
+                <button class="num-btn">1</button>
+                <button class="num-btn">2</button>
+                <button class="num-btn">3</button>
+                <button class="num-btn">4</button>
+                <button class="num-btn">5</button>
+                <button class="num-btn">6</button>
+                <button class="num-btn">7</button>
+                <button class="num-btn">8</button>
+                <button class="num-btn">9</button>
+                <button class="num-btn special">CLR</button>
+                <button class="num-btn">0</button>
+                <button class="num-btn special">DEL</button>
+            </div>
+            
+            <div style="margin-top: 50px;">
+                <button class="btn-primary" id="btn-start">시작하기 (Start)</button>
+            </div>
+        </main>
+
+        <footer>
+            <div class="progress-container">
+                <div class="progress-bar" style="width: 33%;"></div>
+            </div>
+            <div class="step-indicator">
+                <span>학번 확인</span>
+                <span>33%</span>
+            </div>
+        </footer>
+    </div>
+    <script src="app.js?v=1.1.0"></script>
+</body>
+</html>
