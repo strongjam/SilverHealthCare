@@ -11,6 +11,7 @@ const RecitalStep = ({ onNext, onBack, userType }) => {
     const [isWaveActive, setIsWaveActive] = useState(false);
     const recognitionRef = useRef(null);
     const accumulatedTranscriptRef = useRef('');
+    const isRecitingRef = useRef(false);
 
     const formatReference = (ref) => {
         if (!ref) return "";
@@ -30,15 +31,25 @@ const RecitalStep = ({ onNext, onBack, userType }) => {
         if (SpeechRec) {
             recognitionRef.current = new SpeechRec();
             recognitionRef.current.lang = 'ko-KR';
-            recognitionRef.current.continuous = true;
-            recognitionRef.current.interimResults = true;
+            recognitionRef.current.continuous = false;
+            recognitionRef.current.interimResults = true; 
 
             recognitionRef.current.onresult = (event) => {
-                let fullText = "";
+                let fullText = '';
                 for (let i = 0; i < event.results.length; i++) {
                     fullText += event.results[i][0].transcript;
                 }
                 accumulatedTranscriptRef.current = fullText;
+            };
+
+            recognitionRef.current.onend = () => {
+                if (isRecitingRef.current && recognitionRef.current) {
+                    try {
+                        recognitionRef.current.start();
+                    } catch (e) {
+                        console.log('Recognition restart ignored:', e);
+                    }
+                }
             };
 
             recognitionRef.current.onerror = (event) => {
@@ -54,6 +65,7 @@ const RecitalStep = ({ onNext, onBack, userType }) => {
             accumulatedTranscriptRef.current = '';
             setScore(null);
             setIsReciting(true);
+            isRecitingRef.current = true;
             if (recognitionRef.current) {
                 try {
                     recognitionRef.current.start();
@@ -61,20 +73,34 @@ const RecitalStep = ({ onNext, onBack, userType }) => {
             }
         } else {
             setIsReciting(false);
+            isRecitingRef.current = false;
+            setTranscript("🎤 분석 중입니다...");
+            
             if (recognitionRef.current) {
+                // Use a one-time handler for this specific finalization
+                const handleFinalize = () => {
+                    SFX.play('success');
+                    const finalResults = accumulatedTranscriptRef.current.trim();
+                    setTranscript(finalResults);
+                    
+                    if (finalResults) {
+                        const finalScore = getSimilarityScore(fullTargetText, finalResults);
+                        setScore(finalScore);
+                        if (finalScore >= 85) SFX.play('success');
+                    } else {
+                        setScore(0);
+                    }
+                    // Reset onend to the normal restart logic for next session
+                    recognitionRef.current.onend = () => {
+                        if (isRecitingRef.current) {
+                            try { recognitionRef.current.start(); } catch(e){}
+                        }
+                    };
+                };
+                
+                recognitionRef.current.ononend = handleFinalize; // Safety for some browsers
+                recognitionRef.current.onend = handleFinalize;
                 recognitionRef.current.stop();
-            }
-            SFX.play('success');
-            
-            const finalResults = accumulatedTranscriptRef.current.trim();
-            setTranscript(finalResults);
-            
-            if (finalResults) {
-                const finalScore = getSimilarityScore(fullTargetText, finalResults);
-                setScore(finalScore);
-                if (finalScore >= 85) SFX.play('success');
-            } else {
-                setScore(0);
             }
         }
     };

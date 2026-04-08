@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import SelectionStep from './components/SelectionStep';
 import AuthStep from './components/AuthStep';
 import AdminStep from './components/AdminStep';
@@ -19,6 +19,8 @@ function App() {
   const [score, setScore] = useState(0);
   const [pendingRamen, setPendingRamen] = useState(null);
   const [finalRewardMessage, setFinalRewardMessage] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const isSubmitting = useRef(false);
 
   const handleSelection = (type) => {
     setUserType(type);
@@ -83,6 +85,10 @@ function App() {
   };
 
   const handleFinish = async (ramen, finalScore, overrideToken, overrideUser, overrideMsg, shouldRedirect = true) => {
+    if (isSubmitting.current) return;
+    isSubmitting.current = true;
+    setIsSaving(true);
+
     const activeScore = finalScore || score;
     const activeToken = overrideToken || token;
     const activeUser = overrideUser || user || studentId;
@@ -114,11 +120,14 @@ function App() {
       });
     } catch (e) {
       console.error('Failed to save record:', e);
+    } finally {
+      setIsSaving(false);
+      if (shouldRedirect) setStep(3);
     }
-    if (shouldRedirect) setStep(3);
   };
 
   const handleRestart = () => {
+    isSubmitting.current = false; // Reset for next session
     localStorage.removeItem('sugar_user_name');
     localStorage.removeItem('sugar_token');
     localStorage.removeItem('sugar_is_admin');
@@ -175,6 +184,18 @@ function App() {
             finalRewardMessage={finalRewardMessage} 
             onRestart={handleRestart} 
         />
+      )}
+
+      {isSaving && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(5px)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999
+        }}>
+          <h2 style={{ color: 'var(--primary)', marginBottom: '15px' }}>저장 중...</h2>
+          <div className="animate-spin" style={{ width: '40px', height: '40px', border: '4px solid #eee', borderTopColor: 'var(--primary)', borderRadius: '50%' }}></div>
+        </div>
       )}
     </div>
   );
