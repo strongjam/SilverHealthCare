@@ -39,7 +39,27 @@ function App() {
     }
   }, []);
 
-  const handleAuthSuccess = (data) => {
+  const checkAlreadySucceeded = async (activeToken, activeUserType) => {
+    try {
+        const res = await fetch(`https://logos.koreanok.com/api/records/my-summary?user_type=${activeUserType}`, {
+            headers: { 
+                'Authorization': `Bearer ${activeToken}`,
+                'Cache-Control': 'no-cache'
+            }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            const now = new Date();
+            const today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+            return data.some(row => row.date === today && row.high_score >= 85);
+        }
+    } catch (e) {
+        console.error('Failed to check participation:', e);
+    }
+    return false;
+  };
+
+  const handleAuthSuccess = async (data) => {
     setUser(data.username);
     setToken(data.token);
     setIsAdmin(data.isAdmin === 1);
@@ -50,32 +70,50 @@ function App() {
     if (data.isAdmin === 1) setStep(-2);
     else {
       setStudentId(data.username);
-      // If we have a pending reward (Late-Login)
+      
+      // Check if they already succeeded today
+      const alreadySucceeded = await checkAlreadySucceeded(data.token, userType);
+      
       if (pendingRamen) {
-        if (pendingRamen === 'STAMP') {
-            // Koreans: Save first, then go directly to the integrated Step 3
-            handleFinish(pendingRamen, score, data.token, data.username);
-        } else {
-            // Foreigners: Finish immediately to Praise screen
-            const msg = `${data.username}님, ${pendingRamen} 맛있게 드세요!🎉`;
-            setFinalRewardMessage(msg);
-            handleFinish(pendingRamen, score, data.token, data.username, msg);
-        }
+          if (alreadySucceeded) {
+              const msg = userType === 'korean' 
+                ? "이미 오늘 포인트를 받아가셨습니다. 내일 다시 도전해 주세요!" 
+                : `${data.username}님, 오늘은 이미 보상을 수령하셨습니다. (내일 다시 도전해 주세요)`;
+              setFinalRewardMessage(msg);
+              handleFinish('NONE', score, data.token, data.username, msg);
+          } else if (pendingRamen === 'STAMP') {
+              handleFinish(pendingRamen, score, data.token, data.username);
+          } else {
+              const msg = `${data.username}님, '${pendingRamen}' 맛있게 드세요!🎉`;
+              setFinalRewardMessage(msg);
+              handleFinish(pendingRamen, score, data.token, data.username, msg);
+          }
       } else {
         setStep(1); 
       }
     }
   };
 
-  const handleRecitalNext = (finalScore) => {
+  const handleRecitalNext = async (finalScore) => {
     setScore(finalScore);
     if (finalScore >= 85) {
+        // If already logged in, check participation first
+        if (token) {
+            const alreadySucceeded = await checkAlreadySucceeded(token, userType);
+            if (alreadySucceeded) {
+                const msg = userType === 'korean' 
+                    ? "이미 오늘 포인트를 받아가셨습니다. 내일 다시 도전해 주세요!" 
+                    : `${user || studentId}님, 오늘은 이미 보상을 수령하셨습니다. (내일 다시 도전해 주세요)`;
+                setFinalRewardMessage(msg);
+                handleFinish('NONE', finalScore, token, user || studentId, msg);
+                return;
+            }
+        }
+
         if (userType === 'korean') {
-            // Koreans: Go to Auth first, then Reward
             setPendingRamen('STAMP');
             setStep(-1);
         } else {
-            // Foreigners: Reward selection first
             setStep(2);
         }
     } else {
